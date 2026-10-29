@@ -12,12 +12,21 @@ async function main() {
     }
     await mongoose.connect(process.env.MONGO_URI);
     const existing = await User.findOne({ $or: [{ username }, { email: username }] });
-    if (existing) throw new Error("That account already exists; no account was changed.");
-    await User.create({
-        username, password: await bcrypt.hash(password, 12),
-        role: "admin", firstName: "Admin"
-    });
-    console.log("Admin account created. Remove ADMIN_PASSWORD from your environment.");
+    if (existing && existing.role !== "admin") {
+        throw new Error("This username belongs to a customer account.");
+    }
+    const passwordHash = await bcrypt.hash(password, 12);
+    if (existing) {
+        existing.password = passwordHash;
+        await existing.save();
+        console.log("Existing admin password rotated.");
+    } else {
+        await User.create({
+            username, password: passwordHash, role: "admin", firstName: "Admin"
+        });
+        console.log("Admin account created.");
+    }
+    console.log("Remove ADMIN_PASSWORD from your environment.");
 }
 
 main().catch(error => {
