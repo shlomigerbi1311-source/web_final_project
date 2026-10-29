@@ -185,7 +185,7 @@ if (clearCartButton) {
 // מעבר לעמוד Checkout
 if (checkoutButton) {
     checkoutButton.addEventListener("click", function () {
-        const currentUser = JSON.parse(localStorage.getItem("currentUser"));
+        const currentUser = sessionStorage.getItem("authToken") ? JSON.parse(localStorage.getItem("currentUser")) : null;
         const cart = getCart();
 
         if (!currentUser) {
