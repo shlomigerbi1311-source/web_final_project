@@ -48,6 +48,20 @@ async function run() {
     await page.waitForURL("**/checkout.html", { timeout: 10000 });
     await page.screenshot({ path: "artifacts/checkout-with-product.png", fullPage: true });
     console.log("PASS: Cart and checkout navigation works");
+    // Complete checkout through the actual browser UI, not only the API.
+    await page.locator("#fullName").fill("Test User");
+    await page.locator("#phone").fill("0500000000");
+    await page.locator("#country").selectOption("Israel");
+    await page.locator("#city").fill("Tel Aviv");
+    await page.locator("#street").fill("Testing Street 1");
+    await page.locator("#zipCode").fill("0000000");
+    await page.locator('input[name="paymentMethod"][value="google-pay"]').check();
+    await page.locator('#checkoutForm button[type="submit"]').click();
+    await page.getByText("Payment approved! Order created successfully.").waitFor({ timeout: 15000 });
+    await page.waitForURL("**/my-orders.html", { timeout: 15000 });
+    await page.getByText("Dashboard Camera").first().waitFor({ timeout: 15000 });
+    await page.screenshot({ path: "artifacts/customer-orders.png", fullPage: true });
+    console.log("PASS: Demo checkout and order history complete in Chromium");
     await User.create({ username: "ui-admin", role: "admin", password: await bcrypt.hash("StrongBrowserPassword123!", 10) });
     await page.goto(base + "/login.html");
     await page.locator("#loginUsername").fill("ui-admin");
@@ -57,6 +71,40 @@ async function run() {
     await page.getByText("Dashboard Camera").first().waitFor({ timeout: 12000 });
     await page.screenshot({ path: "artifacts/admin-authenticated.png", fullPage: true });
     console.log("PASS: Authenticated admin dashboard works");
+    // Evaluate actual CSS layout at phone/tablet/desktop sizes and capture visual evidence.
+    for (const [width, height, label] of [[390, 844, "mobile"], [768, 1024, "tablet"], [1366, 900, "desktop"]]) {
+      const responsive = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
+      const browserErrors = [];
+      responsive.on("pageerror", error => browserErrors.push(error.message));
+      try {
+        for (const [path, labelPage] of [["/", "home"], ["/store.html", "store"], ["/login.html", "login"], ["/cart.html", "cart"], ["/checkout.html", "checkout"], ["/admin.html", "admin"]]) {
+          const response = await responsive.goto(base + path, { waitUntil: "domcontentloaded" });
+          if (!response || response.status() !== 200) throw Error(labelPage + " failed HTTP status at " + label);
+          if (labelPage === "store") await responsive.getByText("Dashboard Camera").first().waitFor({ timeout: 15000 });
+          const state = await responsive.evaluate(() => {
+            const viewport = document.documentElement.clientWidth;
+            const root = document.documentElement;
+            const body = document.body;
+            const horizontalOverflow = Math.max(root.scrollWidth, body.scrollWidth) - viewport;
+            const header = document.querySelector(".navbar");
+            const cssLoaded = header && getComputedStyle(header).backgroundColor !== "rgba(0, 0, 0, 0)";
+            return {
+              viewport, horizontalOverflow, cssLoaded,
+              pageHeight: root.scrollHeight,
+              title: document.title
+            };
+          });
+          if (!state.cssLoaded) throw Error("CSS not applied: " + labelPage + " at " + label);
+          if (state.horizontalOverflow > 8) throw Error("Horizontal overflow on " + labelPage + " at " + label + ": " + JSON.stringify(state));
+          await responsive.screenshot({ path: "artifacts/" + label + "-" + labelPage + ".png", fullPage: true });
+          console.log("PASS: CSS layout " + label + " " + labelPage + ", overflow=" + state.horizontalOverflow);
+        }
+        if (browserErrors.length) throw Error(label + " JavaScript errors: " + browserErrors.join("; "));
+      } finally {
+        await responsive.close();
+      }
+    }
+    console.log("PASS: Desktop, tablet and mobile responsive browser checks");
   } finally {
     if (browser) await browser.close();
     await new Promise(resolve => server.close(resolve));
