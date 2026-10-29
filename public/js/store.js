@@ -585,9 +585,10 @@ if (clearFiltersButton) {
 // =========================
 
 async function startStorePage() {
-    await loadCurrencyRate();
-    await loadWeatherRecommendation();
+    // Third-party weather and currency services must not delay the product catalog.
     await loadProducts();
+    void loadCurrencyRate();
+    void loadWeatherRecommendation();
 }
 
 // חשיפת פונקציות לכפתורים שנוצרים דינמית בתוך productCard.innerHTML
