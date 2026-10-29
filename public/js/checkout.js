@@ -172,7 +172,7 @@ function loadCheckoutItems() {
         // מציגה את שם המוצר, המחיר, הכמות והמחיר הכולל שלו.
         itemDiv.innerHTML = `
             <div>
-                <h3>${item.name}</h3>
+                <h3></h3>
                 <p>Price: $${item.price}</p>
                 <p>Quantity: ${item.quantity}</p>
             </div>
@@ -180,6 +180,7 @@ function loadCheckoutItems() {
         `;
 
         // מוסיפה את המוצר לאזור המוצרים בעמוד.
+        itemDiv.querySelector("h3").textContent = String(item.name || "");
         checkoutItemsContainer.appendChild(itemDiv);
     });
 
@@ -471,6 +472,7 @@ checkoutForm.addEventListener("submit", async function (event) {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
+                "Authorization": "Bearer " + (sessionStorage.getItem("authToken") || ""),
             },
             body: JSON.stringify(orderData),
         });
