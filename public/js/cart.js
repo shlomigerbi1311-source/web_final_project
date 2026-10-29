@@ -78,7 +78,7 @@ function loadCart() {
             <img src="${item.image}" alt="${item.name}">
 
             <div class="cart-item-details">
-                <h3>${item.name}</h3>
+                <h3></h3>
     <p><strong>Price:</strong> ${formatPrice(item.price)}</p>
 <p><strong>Quantity:</strong> ${item.quantity}</p>
 <p><strong>Item Total:</strong> ${formatPrice(itemTotal)}</p>
@@ -91,6 +91,7 @@ function loadCart() {
             </div>
         `;
 
+        cartItem.querySelector("h3").textContent = String(item.name || "");
         cartItemsContainer.appendChild(cartItem);
     });
 
@@ -194,7 +195,7 @@ if (checkoutButton) {
 
         if (cart.length === 0) {
             showOrderMessage("Your cart is empty.", false);
-            return;showOrderMessage("Your cart is empty.", false);
+            return;
         }
 
         window.location.href = "checkout.html";
