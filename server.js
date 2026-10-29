@@ -872,6 +872,10 @@ app.post("/api/auth/login", checkLoginRate, async function (req, res) {
 // הסבר: קורא את פרטי ההתחברות מגוף הבקשה.
         const username = req.body.username;
         const password = req.body.password;
+        if (typeof username !== "string" || username.length > 100 || typeof password !== "string" || password.length > 128) {
+            recordFailedLogin(req);
+            return res.status(400).json({ message: "Invalid username or password" });
+        }
 
 // הסבר: מחפש במסד משתמש בעל שם המשתמש שהתקבל.
         const user = await User.findOne({ username: username });
@@ -996,6 +1000,10 @@ app.post("/api/login", checkLoginRate, async function (req, res) {
 // הסבר: קורא את פרטי ההתחברות מגוף הבקשה.
         const email = req.body.email;
         const password = req.body.password;
+        if (typeof email !== "string" || email.length > 200 || typeof password !== "string" || password.length > 128) {
+            recordFailedLogin(req);
+            return res.status(401).json({ message: "Invalid email or password" });
+        }
 
 // הסבר: מוודא שהאימייל והסיסמה נשלחו.
         if (!email || !password) {
