@@ -16,7 +16,7 @@ function escapeHtml(value) {
 
 // פונקציה שמביאה את המשתמש המחובר מהדפדפן
 function getCurrentUser() {
-    return JSON.parse(localStorage.getItem("currentUser"));
+    return sessionStorage.getItem("authToken") ? JSON.parse(localStorage.getItem("currentUser")) : null;
 }
 function formatMoney(value) {
     return "$" + (Number(value) || 0).toFixed(2);
