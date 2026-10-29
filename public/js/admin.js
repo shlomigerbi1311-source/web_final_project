@@ -8,7 +8,7 @@ console.log("Admin page JavaScript is connected");
 // מחזירה את פרטי המשתמש המחובר שנשמרו ב-localStorage.
 function getCurrentUser() {
     // קוראת את המחרוזת השמורה והופכת אותה בחזרה לאובייקט JavaScript.
-    return JSON.parse(localStorage.getItem("currentUser"));
+    return sessionStorage.getItem("authToken") ? JSON.parse(localStorage.getItem("currentUser")) : null;
 }
 
 // בונה את ה-Headers שנשלחים לבקשות של מנהל המערכת.
