@@ -46,3 +46,19 @@ jobs:
         env:
           MONGO_URI: mongodb://127.0.0.1:27017/drivex_ci?replicaSet=rs0&directConnection=true
         run: node scripts/ci-integration.js
+      - name: Install browser test runner
+        run: |
+          npm install --no-save --package-lock=false playwright
+          npx playwright install --with-deps chromium
+      - name: Open DriveX in Chromium and capture screenshots
+        env:
+          MONGO_URI: mongodb://127.0.0.1:27017/drivex_ci?replicaSet=rs0&directConnection=true
+          NODE_ENV: test
+        run: node scripts/ci-browser.js
+      - name: Upload website screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drivex-browser-screenshots
+          path: artifacts/
+          if-no-files-found: ignore
