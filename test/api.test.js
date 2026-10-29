@@ -29,7 +29,10 @@ async function request(path, method = "GET", payload, token) {
         method, headers,
         ...(payload !== undefined ? { body: JSON.stringify(payload) } : {})
     });
-    return { status: response.status, data: await response.json() };
+    const text = await response.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = { text }; }
+    return { status: response.status, data };
 }
 
 test("server API works and protected endpoints reject unauthenticated requests", async () => {
