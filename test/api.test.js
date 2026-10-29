@@ -51,6 +51,7 @@ test("login session is required, roles and order ownership are server-enforced",
     const originalFindById = User.findById;
     const originalSessionCreate = Session.create;
     const originalSessionFind = Session.findOne;
+    const originalSessionDelete = Session.deleteOne;
     const passwordHash = await bcrypt.hash("test-password-123", 4);
     const users = {
         customer: { _id: "customer-id", username: "customer", role: "customer", password: passwordHash },
@@ -60,6 +61,7 @@ test("login session is required, roles and order ownership are server-enforced",
     User.findOne = async query => users[query.username] || null;
     User.findById = async id => Object.values(users).find(user => user._id === id) || null;
     Session.create = async doc => { sessions.set(doc.tokenHash, doc); return doc; };
+    Session.deleteOne = async query => { sessions.delete(query.tokenHash); return { deletedCount: 1 }; };
     Session.findOne = async query => {
         const session = sessions.get(query.tokenHash);
         return session && session.expiresAt > new Date() ? session : null;
@@ -92,6 +94,7 @@ test("login session is required, roles and order ownership are server-enforced",
         User.findById = originalFindById;
         Session.create = originalSessionCreate;
         Session.findOne = originalSessionFind;
+        Session.deleteOne = originalSessionDelete;
     }
 });
 
