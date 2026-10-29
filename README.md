@@ -41,4 +41,4 @@ Do not upload your `.env` file or database credentials to GitHub.
 
 ---
 
-**Developers:** [Shlomi Gerbi](https://github.com/shlomigerbi1311-source) and [Ophir Agami](https://github.com/OphirAgami)
+**Developers:** [Shlomi Jereby](https://github.com/shlomigerbi1311-source) and [Ophir Agami](https://github.com/OphirAgami)
