@@ -13,13 +13,10 @@ function getCurrentUser() {
 
 // בונה את ה-Headers שנשלחים לבקשות של מנהל המערכת.
 function getAdminHeaders() {
-    // מקבלת את המשתמש המחובר כדי לצרף את שם המשתמש לבקשה.
-    const currentUser = getCurrentUser();
-
-    // מחזירה אובייקט Headers: סוג תוכן JSON ושם המשתמש לצורך אימות מנהל.
+    const token = sessionStorage.getItem("authToken");
     return {
         "Content-Type": "application/json",
-        "x-username": currentUser ? currentUser.username || currentUser.email : "",
+        "Authorization": token ? "Bearer " + token : ""
     };
 }
 
@@ -844,7 +841,7 @@ window.deleteSupportTicket = deleteSupportTicket;
 // =========================
 
 // פונקציית האתחול הראשית של דף המנהל.
-function startAdminPage() {
+async function startAdminPage() {
     // בודקת הרשאת מנהל לפני טעינת מידע רגיש.
     const isAdmin = checkAdminAccess();
 
@@ -854,6 +851,18 @@ function startAdminPage() {
     }
 
     // לאחר אישור הגישה, טוענת את כל המוצרים, ההזמנות, הפניות והגרפים.
+    const token = sessionStorage.getItem("authToken");
+    try {
+        const response = await fetch("/api/auth/me", { headers: { Authorization: "Bearer " + (token || "") } });
+        const data = await response.json();
+        if (!response.ok || data.user.role !== "admin") {
+            showAdminMessage("Admin session expired. Please login again.", false);
+            return;
+        }
+    } catch (error) {
+        showAdminMessage("Cannot verify admin session.", false);
+        return;
+    }
     loadProducts();
     loadOrders();
     loadSupportTickets();
