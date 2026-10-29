@@ -1,0 +1,64 @@
+name: Verify DriveX
+on:
+  push:
+    branches: [main, security-hardening-2026-10-29]
+  pull_request:
+    branches: [main]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Syntax-check JavaScript
+        run: find . -name '*.js' -not -path './node_modules/*' -print0 | xargs -0 -n1 node --check
+      - name: Run unit tests
+        run: npm test
+      - name: Report dependency advisories
+        run: npm audit --omit=dev --audit-level=moderate
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Start isolated MongoDB replica set
+        run: |
+          docker run -d --name drivex-ci-mongo --network host mongo:7 --replSet rs0 --bind_ip_all
+          for i in $(seq 1 40); do
+            if docker exec drivex-ci-mongo mongosh --quiet --eval 'db.adminCommand({ping:1})' >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          docker exec drivex-ci-mongo mongosh --quiet --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"127.0.0.1:27017"}]})'
+          for i in $(seq 1 40); do
+            if docker exec drivex-ci-mongo mongosh --quiet --eval 'rs.isMaster().ismaster' | grep -q true; then exit 0; fi
+            sleep 2
+          done
+          exit 1
+      - name: Run complete Express and MongoDB integration tests
+        env:
+          MONGO_URI: mongodb://127.0.0.1:27017/drivex_ci?replicaSet=rs0&directConnection=true
+        run: node scripts/ci-integration.js
+      - name: Install browser test runner
+        run: |
+          npm install --no-save --package-lock=false playwright
+          npx playwright install --with-deps chromium
+      - name: Open DriveX in Chromium and capture screenshots
+        env:
+          MONGO_URI: mongodb://127.0.0.1:27017/drivex_ci?replicaSet=rs0&directConnection=true
+          NODE_ENV: test
+        run: node scripts/ci-browser.js
+      - name: Upload website screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drivex-browser-screenshots
+          path: artifacts/
+          if-no-files-found: ignore

@@ -37,6 +37,19 @@ The repository contains the source code, not a hosted website. To run it locally
 4. Run `npm start`.
 5. Open `http://localhost:3000`.
 
+For the admin account, set `ADMIN_USERNAME` (normally `admin`) and a unique `ADMIN_PASSWORD` of at least 12 characters in your local `.env` file. Run `npm run create-admin` once to create the account or rotate the password of an existing admin. **Remove `ADMIN_PASSWORD` from `.env` after setup.** The original demo admin password must be changed before sharing a running instance.
+
+## Security and tests
+
+- Login uses expiring sessions validated by the server. Logging out revokes the session.
+- Product and order management requires a verified admin account. Customers can only view their own orders.
+- Order totals are calculated from MongoDB product prices; inventory and order creation run in a MongoDB transaction.
+- Demo product resets are disabled by default. Do not enable them on a deployed instance.
+- Payment is **demo-only**; DriveX does not process real credit cards or payments.
+- Run `npm test` for unit and mocked API tests. GitHub Actions also checks syntax and dependency advisories.
+
+The checkout transaction needs a MongoDB Atlas replica set or another MongoDB deployment that supports transactions. Tests that mock MongoDB do not replace a real database end-to-end test.
+
 Do not upload your `.env` file or database credentials to GitHub.
 
 ---

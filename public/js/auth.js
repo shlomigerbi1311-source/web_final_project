@@ -107,6 +107,7 @@ if (loginForm) {
 
             // שמירת המשתמש המחובר בדפדפן
             localStorage.setItem("currentUser", JSON.stringify(loggedUser));
+            sessionStorage.setItem("authToken", data.token);
 
             showMessage(messageElement, "Login successful!", "green");
 

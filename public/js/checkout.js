@@ -69,7 +69,7 @@ function getCart() {
 
 // מחזירה את פרטי המשתמש המחובר מתוך localStorage.
 function getCurrentUser() {
-    return JSON.parse(localStorage.getItem("currentUser"));
+    return sessionStorage.getItem("authToken") ? JSON.parse(localStorage.getItem("currentUser")) : null;
 }
 
 // מחזירה את מחיר המשלוח וזמן המשלוח לפי המדינה שנבחרה.
@@ -172,14 +172,15 @@ function loadCheckoutItems() {
         // מציגה את שם המוצר, המחיר, הכמות והמחיר הכולל שלו.
         itemDiv.innerHTML = `
             <div>
-                <h3>${item.name}</h3>
-                <p>Price: $${item.price}</p>
-                <p>Quantity: ${item.quantity}</p>
+                <h3></h3>
+                <p>Price: ${(Number(item.price) || 0).toFixed(2)}</p>
+                <p>Quantity: ${Number(item.quantity) || 0}</p>
             </div>
-            <strong>$${item.price * item.quantity}</strong>
+            <strong>${((Number(item.price) || 0) * (Number(item.quantity) || 0)).toFixed(2)}</strong>
         `;
 
         // מוסיפה את המוצר לאזור המוצרים בעמוד.
+        itemDiv.querySelector("h3").textContent = String(item.name || "");
         checkoutItemsContainer.appendChild(itemDiv);
     });
 
@@ -471,6 +472,7 @@ checkoutForm.addEventListener("submit", async function (event) {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
+                "Authorization": "Bearer " + (sessionStorage.getItem("authToken") || ""),
             },
             body: JSON.stringify(orderData),
         });

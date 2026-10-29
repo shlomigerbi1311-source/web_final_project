@@ -75,22 +75,32 @@ function loadCart() {
         cartItem.className = "cart-item";
 
         cartItem.innerHTML = `
-            <img src="${item.image}" alt="${item.name}">
+            <img src="" alt="">
 
             <div class="cart-item-details">
-                <h3>${item.name}</h3>
+                <h3></h3>
     <p><strong>Price:</strong> ${formatPrice(item.price)}</p>
-<p><strong>Quantity:</strong> ${item.quantity}</p>
+<p><strong>Quantity:</strong> ${Number(item.quantity) || 0}</p>
 <p><strong>Item Total:</strong> ${formatPrice(itemTotal)}</p>
-<p><strong>Available stock:</strong> ${item.stock || "Unknown"}</p>
+<p><strong>Available stock:</strong> ${Number.isFinite(Number(item.stock)) ? Number(item.stock) : "Unknown"}</p>
                 <div class="cart-item-actions">
-                    <button type="button" onclick="addOneItem('${item._id}')">Add One</button>
-                    <button type="button" onclick="removeOneItem('${item._id}')">Remove One</button>
-                    <button type="button" onclick="removeItemCompletely('${item._id}')">Remove Product</button>
+                    <button type="button">Add One</button>
+                    <button type="button">Remove One</button>
+                    <button type="button">Remove Product</button>
                 </div>
             </div>
         `;
 
+        cartItem.querySelector("h3").textContent = String(item.name || "");
+        const picture = cartItem.querySelector("img");
+        const imagePath = String(item.image || "");
+        picture.src = imagePath.startsWith("/images/") ? imagePath : "/images/products/phone-holder.jpg";
+        picture.alt = String(item.name || "");
+        const buttons = cartItem.querySelectorAll(".cart-item-actions button");
+        const productId = String(item._id || "");
+        buttons[0].addEventListener("click", () => addOneItem(productId));
+        buttons[1].addEventListener("click", () => removeOneItem(productId));
+        buttons[2].addEventListener("click", () => removeItemCompletely(productId));
         cartItemsContainer.appendChild(cartItem);
     });
 
@@ -184,7 +194,7 @@ if (clearCartButton) {
 // מעבר לעמוד Checkout
 if (checkoutButton) {
     checkoutButton.addEventListener("click", function () {
-        const currentUser = JSON.parse(localStorage.getItem("currentUser"));
+        const currentUser = sessionStorage.getItem("authToken") ? JSON.parse(localStorage.getItem("currentUser")) : null;
         const cart = getCart();
 
         if (!currentUser) {
@@ -194,7 +204,7 @@ if (checkoutButton) {
 
         if (cart.length === 0) {
             showOrderMessage("Your cart is empty.", false);
-            return;showOrderMessage("Your cart is empty.", false);
+            return;
         }
 
         window.location.href = "checkout.html";

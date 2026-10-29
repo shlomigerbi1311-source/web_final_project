@@ -16,7 +16,7 @@ function escapeHtml(value) {
 
 // פונקציה שמביאה את המשתמש המחובר מהדפדפן
 function getCurrentUser() {
-    return JSON.parse(localStorage.getItem("currentUser"));
+    return sessionStorage.getItem("authToken") ? JSON.parse(localStorage.getItem("currentUser")) : null;
 }
 function formatMoney(value) {
     return "$" + (Number(value) || 0).toFixed(2);
@@ -76,7 +76,10 @@ async function loadCustomerOrders() {
     try {
         const productsMap = await getProductsMap();
         // שליחת בקשה לשרת לקבלת ההזמנות של המשתמש המחובר
-        const response = await fetch("/api/orders/customer/" + username);
+        const response = await fetch("/api/orders/customer/" + encodeURIComponent(username), {
+            headers: { Authorization: "Bearer " + (sessionStorage.getItem("authToken") || "") }
+        });
+        if (!response.ok) throw new Error("Cannot access orders");
         const orders = await response.json();
 
         customerOrdersContainer.innerHTML = "";

@@ -21,15 +21,19 @@ const Order = require("./models/Order");
 const SupportTicket = require("./models/supportTicket");
 // הסבר: bcrypt משמש להצפנת סיסמאות ולהשוואת סיסמה לסיסמה המוצפנת.
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
+const Session = require("./models/Session");
+const { issueSession, requireAuth, requireAdmin, checkLoginRate, recordFailedLogin, clearFailedLogins } = require("./lib/security");
+const { SHIPPING, validateOrderItems, validateProductInput, buildCheckoutSummary } = require("./lib/order-logic");
 
 // יצירת אפליקציית Express
 const app = express();
 
 // הגדרות בסיסיות לשרת
 // הסבר: מפעיל CORS עבור כל הבקשות שנכנסות לשרת.
-app.use(cors());
+app.use(cors({ origin: false })); // Same-origin demo app.
 // הסבר: מאפשר לשרת לקרוא גוף בקשה שנשלח בפורמט JSON דרך req.body.
-app.use(express.json());
+app.use(express.json({ limit: "50kb" }));
 // הסבר: מאפשר להגיש לדפדפן את הקבצים הסטטיים מתוך תיקיית public.
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -41,16 +45,11 @@ const MONGO_URI = process.env.MONGO_URI;
 
 // חיבור למסד הנתונים MongoDB Atlas
 // הסבר: מתחיל ניסיון חיבור למסד הנתונים בעזרת כתובת החיבור.
-mongoose
-    .connect(MONGO_URI)
-    // הסבר: הקטע הזה פועל כאשר החיבור ל-MongoDB הצליח.
-    .then(function () {
-        console.log("Connected to MongoDB Atlas successfully");
-    })
-    // הסבר: הקטע הזה פועל כאשר החיבור נכשל ומדפיס את סיבת השגיאה.
-    .catch(function (error) {
-        console.log("MongoDB connection error:", error.message);
-    });
+if (process.env.NODE_ENV !== "test") {
+    mongoose.connect(MONGO_URI)
+        .then(() => console.log("Connected to MongoDB Atlas successfully"))
+        .catch(error => console.error("MongoDB connection error:", error.message));
+}
 
 // בדיקה שה-API עובד
 // הסבר: נתיב GET פשוט שמאפשר לבדוק שהשרת וה-API פעילים.
@@ -60,49 +59,6 @@ app.get("/api/test", function (req, res) {
         message: "DriveX API is working",
     });
 });
-
-/* -------------------------------
-   Admin Middleware
--------------------------------- */
-
-// Middleware שבודק מול MongoDB אם המשתמש הוא מנהל
-// הסבר: Middleware מקבל את הבקשה, התשובה והפונקציה next שמעבירה לנתיב הבא.
-async function requireAdmin(req, res, next) {
-    try {
-// הסבר: קורא מה-Headers את שם המשתמש שנשלח על ידי דף המנהל.
-        const username = req.headers["x-username"];
-
-// הסבר: אם לא נשלח שם משתמש, מחזיר שגיאת 401 ולא ממשיך לנתיב.
-        if (!username) {
-            return res.status(401).json({
-                message: "Login is required",
-            });
-        }
-
-// הסבר: מחפש במסד משתמש לפי username או לפי email.
-        const user = await User.findOne({
-            $or: [
-                { username: username },
-                { email: username },
-            ],
-        });
-
-// הסבר: אם המשתמש לא נמצא או שאינו בעל תפקיד admin, מחזיר שגיאת 403.
-        if (!user || user.role !== "admin") {
-            return res.status(403).json({
-                message: "Access denied. Admin only.",
-            });
-        }
-
-// הסבר: המשתמש הוא מנהל ולכן next מאפשר לבקשה להמשיך אל הנתיב המבוקש.
-        next();
-// הסבר: אם בדיקת ההרשאה נכשלה טכנית, מחזיר שגיאת שרת 500.
-    } catch (error) {
-        res.status(500).json({
-            message: "Error checking admin permissions",
-        });
-    }
-}
 
 // יצירת מספר הזמנה בסגנון חנות אמיתית
 function generateOrderNumber() {
@@ -147,7 +103,7 @@ app.get("/api/products", async function (req, res) {
 // הסבר: מקבל את הקטגוריה שלפיה רוצים לסנן.
         const category = req.query.category;
 // הסבר: מקבל את מילות החיפוש שהמשתמש הקליד.
-        const search = req.query.search;
+        const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 100) : "";
 
 // הסבר: אובייקט זה יכיל את הוראות המיון עבור MongoDB.
         let sortQuery = {};
@@ -162,12 +118,12 @@ app.get("/api/products", async function (req, res) {
 
         // חיפוש לפי שם מוצר או תיאור
 // הסבר: מוסיף חיפוש רק כאשר הוזן טקסט שאינו ריק.
-        if (search && search.trim() !== "") {
+        if (search !== "") {
 // הסבר: $or מאפשר למצוא התאמה בשם המוצר או בתיאור שלו.
             filterQuery.$or = [
 // הסבר: $regex מבצע חיפוש חלקי ו-$options עם i מתעלם מהבדל בין אותיות גדולות לקטנות.
-                { name: { $regex: search, $options: "i" } },
-                { description: { $regex: search, $options: "i" } },
+                { name: { $regex: search.replace(/[^a-zA-Z0-9\u0590-\u05FF ]/g, ""), $options: "i" } },
+                { description: { $regex: search.replace(/[^a-zA-Z0-9\u0590-\u05FF ]/g, ""), $options: "i" } },
             ];
         }
 
@@ -213,43 +169,13 @@ app.get("/api/products", async function (req, res) {
 // יצירת מוצר חדש - מנהל בלבד
 // הסבר: requireAdmin מופעל לפני הנתיב ולכן רק מנהל יכול ליצור מוצר.
 app.post("/api/products", requireAdmin, async function (req, res) {
+    let productData;
+    try { productData = validateProductInput(req.body); }
+    catch (error) { return res.status(400).json({ message: error.message }); }
     try {
-// הסבר: קורא מגוף הבקשה את שם המוצר.
-        const name = req.body.name;
-// הסבר: קורא את הקטגוריה או משתמש במחרוזת ריקה אם לא התקבלה.
-        const category = req.body.category || "";
-// הסבר: קורא את מחיר המוצר.
-        const price = req.body.price;
-// הסבר: מקבל את כתובת התמונה מאחד משני שמות השדות האפשריים.
-        const image = req.body.image || req.body.imageUrl || "";
-        const imageUrl = req.body.imageUrl || req.body.image || "";
-// הסבר: קורא את כמות המלאי או משתמש ב-0 כברירת מחדל.
-        const stock = req.body.stock || 0;
-// הסבר: קורא את תיאור המוצר או משתמש במחרוזת ריקה.
-        const description = req.body.description || "";
-
-// הסבר: יוצר ושומר מסמך Product חדש בתוך MongoDB.
-        const newProduct = await Product.create({
-            name: name,
-            category: category,
-            price: price,
-            image: image,
-            imageUrl: imageUrl,
-            stock: stock,
-            description: description,
-        });
-
-// הסבר: מחזיר הודעת הצלחה ואת המוצר החדש שנוצר.
-        res.json({
-            message: "Product created successfully",
-            product: newProduct,
-        });
-// הסבר: במקרה של כשל ביצירת המוצר מחזיר שגיאת שרת.
-    } catch (error) {
-        res.status(500).json({
-            message: "Error creating product",
-        });
-    }
+        const product = await Product.create(productData);
+        res.status(201).json({ message: "Product created successfully", product });
+    } catch (error) { res.status(500).json({ message: "Error creating product" }); }
 });
 
 // מחיקת מוצר לפי מזהה - מנהל בלבד
@@ -285,55 +211,14 @@ app.delete("/api/products/:id", requireAdmin, async function (req, res) {
 // עדכון מוצר קיים לפי מזהה - מנהל בלבד
 // הסבר: נתיב PUT מעדכן מוצר קיים ורק מנהל רשאי להשתמש בו.
 app.put("/api/products/:id", requireAdmin, async function (req, res) {
+    let productData;
+    try { productData = validateProductInput(req.body); }
+    catch (error) { return res.status(400).json({ message: error.message }); }
     try {
-// הסבר: מקבל את מזהה המוצר שצריך לעדכן.
-        const productId = req.params.id;
-
-// הסבר: קורא את הערכים החדשים שנשלחו מגוף הבקשה.
-        const name = req.body.name;
-        const category = req.body.category || "";
-        const price = req.body.price;
-        const image = req.body.image || req.body.imageUrl || "";
-        const imageUrl = req.body.imageUrl || req.body.image || "";
-        const stock = req.body.stock || 0;
-        const description = req.body.description || "";
-
-// הסבר: מעדכן במסד את המוצר בעל ה-ID שהתקבל.
-        const updatedProduct = await Product.findByIdAndUpdate(
-            productId,
-            {
-                name: name,
-                category: category,
-                price: price,
-                image: image,
-                imageUrl: imageUrl,
-                stock: stock,
-                description: description,
-            },
-            {
-// הסבר: new: true גורם ל-Mongoose להחזיר את המוצר לאחר העדכון ולא את הגרסה הישנה.
-                new: true,
-            }
-        );
-
-// הסבר: אם המוצר לא נמצא, מחזיר שגיאת 404.
-        if (!updatedProduct) {
-            return res.status(404).json({
-                message: "Product not found",
-            });
-        }
-
-// הסבר: מחזיר הודעת הצלחה ואת המוצר המעודכן.
-        res.json({
-            message: "Product updated successfully",
-            product: updatedProduct,
-        });
-// הסבר: מחזיר שגיאת 500 במקרה של כשל בעדכון.
-    } catch (error) {
-        res.status(500).json({
-            message: "Error updating product",
-        });
-    }
+        const product = await Product.findByIdAndUpdate(req.params.id, productData, { new: true, runValidators: true });
+        if (!product) return res.status(404).json({ message: "Product not found" });
+        res.json({ message: "Product updated successfully", product });
+    } catch (error) { res.status(400).json({ message: "Invalid product ID or data" }); }
 });
 
 /* -------------------------------
@@ -407,7 +292,10 @@ app.get("/api/stats/average-price-by-category", requireAdmin, async function (re
 -------------------------------- */
 // יצירת מוצרים לדוגמה במסד הנתונים עם תמונות מקומיות מתוך public/images/products
 // הסבר: כניסה לנתיב הזה ממלאת את מסד הנתונים במוצרי דוגמה.
-app.get("/api/products/seed", async function (req, res) {
+app.post("/api/products/seed", requireAdmin, async function (req, res) {
+    if (process.env.ENABLE_DEMO_SEED !== "true") {
+        return res.status(403).json({ message: "Demo seeding is disabled." });
+    }
     try {
         // מוחק מוצרים קיימים לפני הכנסת הדוגמאות החדשות
 // הסבר: מוחק את כל המוצרים הקיימים כדי למנוע כפילויות בנתוני הדוגמה.
@@ -598,124 +486,73 @@ app.get("/api/products/seed", async function (req, res) {
 
 // יצירת הזמנה חדשה לאחר תשלום דמו
 // הסבר: נתיב POST זה מקבל את פרטי הקנייה ויוצר הזמנה חדשה.
-app.post("/api/orders", async function (req, res) {
+app.post("/api/orders", requireAuth, async function (req, res) {
+    const address = req.body?.shippingAddress;
+    let items;
     try {
-// הסבר: Destructuring מוציא את כל פרטי ההזמנה מתוך req.body.
-        const {
-            customerUsername,
-            items,
-            subtotal,
-            shippingFee,
-            deliveryDays,
-            shippingAddress,
-            payment,
-            couponCode,
-        } = req.body;
-
-// הסבר: בודק שנשלחו שם לקוח ומערך מוצרים שאינו ריק.
-        if (!customerUsername || !items || items.length === 0) {
-            return res.status(400).json({
-                message: "Missing order details",
-            });
+        items = validateOrderItems(req.body?.items);
+        if (!address || !["fullName","country","city","street"].every(
+            key => typeof address[key] === "string" && address[key].trim().length > 0 && address[key].length <= 200
+        ) || String(address.phone || "").length > 40 || String(address.zipCode || "").length > 30) {
+            return res.status(400).json({ message: "Invalid shipping address." });
         }
-
-// הסבר: בודק שקיימים פרטי כתובת המשלוח החיוניים.
-        if (
-            !shippingAddress ||
-            !shippingAddress.fullName ||
-            !shippingAddress.country ||
-            !shippingAddress.city ||
-            !shippingAddress.street
-        ) {
-            return res.status(400).json({
-                message: "Missing shipping address",
-            });
+        if (!SHIPPING[address.country]) return res.status(400).json({ message: "Unsupported shipping country." });
+        const payment = req.body?.payment;
+        if (!payment || payment.status !== "Paid - Demo" ||
+            !["Demo Credit Card","Demo Google Pay"].includes(payment.method)) {
+            return res.status(400).json({ message: "Invalid demo payment." });
         }
-
-// הסבר: מאשר את ההזמנה רק כאשר התקבל סטטוס תשלום הדמו המתאים.
-        if (!payment || payment.status !== "Paid - Demo") {
-            return res.status(400).json({
-                message: "Payment was not approved",
-            });
-        }
-
-// הסבר: ממיר את סכום הביניים למספר בטוח לחישוב.
-        const subtotalNumber = Number(subtotal) || 0;
-// הסבר: ממיר גם את מחיר המשלוח למספר.
-        const shippingFeeNumber = Number(shippingFee) || 0;
-// הסבר: מנרמל את קוד הקופון כדי לבדוק אותו באופן אחיד.
-        const normalizedCouponCode = String(couponCode || "").trim().toUpperCase();
-// הסבר: השרת מחשב מחדש את ההנחה ואינו מסתמך רק על החישוב מהדפדפן.
-        const discountAmount = calculateCouponDiscount(normalizedCouponCode, subtotalNumber);
-// הסבר: מחשב את הסכום הסופי לאחר הוספת משלוח והפחתת ההנחה.
-        const finalTotalPrice = subtotalNumber + shippingFeeNumber - discountAmount;
-
-        // בדיקת מלאי לפני יצירת ההזמנה
-// הסבר: עובר על כל פריט כדי לוודא שקיים מספיק מלאי לפני יצירת ההזמנה.
-        for (const item of items) {
-// הסבר: שולף ממסד הנתונים את המוצר לפי המזהה שנשלח.
-            const product = await Product.findById(item.productId);
-
-// הסבר: אם מוצר אינו קיים, מחזיר שגיאת 404 ועוצר את ההזמנה.
-            if (!product) {
-                return res.status(404).json({
-                    message: "Product not found: " + item.name,
+    } catch (error) { return res.status(400).json({ message: error.message }); }
+    const session = await mongoose.startSession();
+    try {
+        let savedOrder;
+        await session.withTransaction(async () => {
+            const products = [];
+            for (const item of items) {
+                const product = await Product.findById(item.productId).session(session);
+                if (!product) throw Object.assign(new Error("Product not found."), { status: 404 });
+                if (!Number.isFinite(product.price) || product.price < 0 || product.stock < item.quantity) {
+                    throw Object.assign(new Error("Product out of stock: " + product.name), { status: 409 });
+                }
+                products.push({
+                    productId: item.productId, name: product.name, price: product.price,
+                    image: product.image || product.imageUrl || "", quantity: item.quantity
                 });
             }
-
-// הסבר: אם הכמות המבוקשת גבוהה מהמלאי הקיים, מחזיר שגיאה.
-            if (product.stock < item.quantity) {
-                return res.status(400).json({
-                    message: "Not enough stock for product: " + product.name,
-                });
+            const summary = buildCheckoutSummary(products, req.body.couponCode, address.country);
+            for (const item of items) {
+                const result = await Product.updateOne(
+                    { _id: item.productId, stock: { $gte: item.quantity } },
+                    { $inc: { stock: -item.quantity } }, { session }
+                );
+                if (result.modifiedCount !== 1) {
+                    throw Object.assign(new Error("Not enough stock; please try again."), { status: 409 });
+                }
             }
-        }
-
-// הסבר: יוצר אובייקט Order חדש עם כל פרטי ההזמנה.
-        const newOrder = new Order({
-// הסבר: יוצר מספר הזמנה חדש ואקראי.
-            orderNumber: generateOrderNumber(),
-            customerUsername: customerUsername,
-            items: items,
-            subtotal: subtotalNumber,
-            shippingFee: shippingFeeNumber,
-// הסבר: שומר את קוד הקופון רק אם הוא באמת העניק הנחה.
-            couponCode: discountAmount > 0 ? normalizedCouponCode : "",
-            discountAmount: discountAmount,
-            deliveryDays: deliveryDays,
-            totalPrice: finalTotalPrice,
-            shippingAddress: shippingAddress,
-            payment: payment,
-// הסבר: הזמנה חדשה מתחילה בסטטוס Paid - Processing.
-            status: "Paid - Processing",
-        });
-
-// הסבר: שומר את ההזמנה במסד הנתונים.
-        await newOrder.save();
-
-        // הורדת מלאי אחרי שההזמנה נשמרה בהצלחה
-// הסבר: לאחר השמירה עובר שוב על המוצרים כדי להפחית את הכמות שנרכשה.
-        for (const item of items) {
-// הסבר: מעדכן את המוצר המתאים לפי ה-ID שלו.
-            await Product.findByIdAndUpdate(item.productId, {
-// הסבר: $inc עם מספר שלילי מפחית מהמלאי את הכמות שהוזמנה.
-                $inc: {
-                    stock: -item.quantity,
+            const [order] = await Order.create([{
+                orderNumber: "DX-" + new Date().getFullYear() + "-" + crypto.randomBytes(8).toString("hex").toUpperCase(),
+                customerUsername: req.user.username || req.user.email,
+                items: products, ...summary,
+                shippingAddress: {
+                    fullName: address.fullName.trim(), phone: String(address.phone || ""),
+                    country: address.country, city: address.city.trim(), street: address.street.trim(),
+                    zipCode: String(address.zipCode || "")
                 },
-            });
-        }
-
-// הסבר: מחזיר סטטוס 201 שמסמן שמשאב חדש נוצר בהצלחה.
-        res.status(201).json({
-            message: "Order created successfully",
-            order: newOrder,
+                payment: {
+                    method: req.body.payment.method, status: "Paid - Demo",
+                    last4: String(req.body.payment.last4 || "").slice(-4)
+                },
+                status: "Paid - Processing"
+            }], { session });
+            savedOrder = order;
         });
-// הסבר: מחזיר שגיאת שרת אם תהליך יצירת ההזמנה נכשל.
+        res.status(201).json({ message: "Order created successfully", order: savedOrder });
     } catch (error) {
-        res.status(500).json({
-            message: "Error creating order",
+        console.error("Checkout error:", error.message);
+        res.status(error.status || 500).json({
+            message: error.status ? error.message : "Error creating order"
         });
-    }
+    } finally { await session.endSession(); }
 });
 
 // שליפת כל ההזמנות מהחדשה לישנה - מנהל בלבד
@@ -813,7 +650,10 @@ app.put("/api/orders/:id/status", requireAdmin, async function (req, res) {
 
 // שליפת הזמנות של לקוח לפי שם משתמש
 // הסבר: נתיב זה מחזיר רק את ההזמנות ששייכות ללקוח מסוים.
-app.get("/api/orders/customer/:username", async function (req, res) {
+app.get("/api/orders/customer/:username", requireAuth, async function (req, res) {
+    if (req.user.role !== "admin" && req.params.username !== req.user.username) {
+        return res.status(403).json({ message: "You can only view your own orders." });
+    }
     try {
 // הסבר: מקבל את שם המשתמש מתוך כתובת הנתיב.
         const username = req.params.username;
@@ -984,9 +824,9 @@ app.post("/api/auth/signup", async function (req, res) {
         const password = req.body.password;
 
 // הסבר: מוודא ששני השדות החיוניים קיימים.
-        if (!username || !password) {
+        if (typeof username !== "string" || username.trim().length < 3 || username.length > 100 || typeof password !== "string" || password.length < 8 || password.length > 128) {
             return res.status(400).json({
-                message: "Username and password are required",
+                message: "Username must be 3-100 characters and password 8-128 characters",
             });
         }
 
@@ -1027,35 +867,45 @@ app.post("/api/auth/signup", async function (req, res) {
 
 // התחברות לפי שם משתמש
 // הסבר: נתיב התחברות זה מאמת משתמש לפי username וסיסמה.
-app.post("/api/auth/login", async function (req, res) {
+app.post("/api/auth/login", checkLoginRate, async function (req, res) {
     try {
 // הסבר: קורא את פרטי ההתחברות מגוף הבקשה.
         const username = req.body.username;
         const password = req.body.password;
+        if (typeof username !== "string" || username.length > 100 || typeof password !== "string" || password.length > 128) {
+            recordFailedLogin(req);
+            return res.status(400).json({ message: "Invalid username or password" });
+        }
 
 // הסבר: מחפש במסד משתמש בעל שם המשתמש שהתקבל.
         const user = await User.findOne({ username: username });
 
 // הסבר: אם המשתמש לא נמצא, מחזיר הודעה כללית כדי לא לחשוף מידע.
         if (!user) {
+            recordFailedLogin(req);
             return res.status(400).json({
                 message: "Invalid username or password",
             });
         }
 
 // הסבר: משווה את הסיסמה שהוזנה לסיסמה המוצפנת במסד.
+        if (typeof password !== "string" || !password) return res.status(400).json({ message: "Invalid username or password" });
         const isPasswordCorrect = await bcrypt.compare(password, user.password);
 
 // הסבר: אם הסיסמה אינה מתאימה, ההתחברות נדחית.
         if (!isPasswordCorrect) {
+            recordFailedLogin(req);
             return res.status(400).json({
                 message: "Invalid username or password",
             });
         }
 
 // הסבר: מחזיר את פרטי המשתמש הדרושים לצד הלקוח, ללא הסיסמה.
+        clearFailedLogins(req);
+        const token = await issueSession(user._id);
         res.json({
             message: "Login successful",
+            token,
             user: {
                 username: user.username,
                 email: user.email || "",
@@ -1088,9 +938,9 @@ app.post("/api/register", async function (req, res) {
 // הסבר: כל משתמש חדש שנרשם דרך הנתיב מקבל תפקיד customer.
         const role = "customer";
 // הסבר: דוחה הרשמה ללא אימייל או סיסמה.
-        if (!email || !password) {
+        if (typeof email !== "string" || email.length > 200 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || typeof password !== "string" || password.length < 8 || password.length > 128) {
             return res.status(400).json({
-                message: "Email and password are required",
+                message: "Please provide a valid email and password (8-128 characters)",
             });
         }
 
@@ -1145,11 +995,15 @@ app.post("/api/register", async function (req, res) {
 
 // התחברות לפי אימייל
 // הסבר: נתיב התחברות נוסף שמקבל אימייל וסיסמה.
-app.post("/api/login", async function (req, res) {
+app.post("/api/login", checkLoginRate, async function (req, res) {
     try {
 // הסבר: קורא את פרטי ההתחברות מגוף הבקשה.
         const email = req.body.email;
         const password = req.body.password;
+        if (typeof email !== "string" || email.length > 200 || typeof password !== "string" || password.length > 128) {
+            recordFailedLogin(req);
+            return res.status(401).json({ message: "Invalid email or password" });
+        }
 
 // הסבר: מוודא שהאימייל והסיסמה נשלחו.
         if (!email || !password) {
@@ -1168,24 +1022,30 @@ app.post("/api/login", async function (req, res) {
 
 // הסבר: אם המשתמש לא נמצא, מחזיר שגיאת אימות 401.
         if (!user) {
+            recordFailedLogin(req);
             return res.status(401).json({
                 message: "Invalid email or password",
             });
         }
 
 // הסבר: משווה את הסיסמה שהוזנה ל-Hash שנשמר במסד.
+        if (typeof password !== "string" || !password) return res.status(401).json({ message: "Invalid email or password" });
         const isMatch = await bcrypt.compare(password, user.password);
 
 // הסבר: אם ההשוואה נכשלת, מחזיר שגיאת אימות.
         if (!isMatch) {
+            recordFailedLogin(req);
             return res.status(401).json({
                 message: "Invalid email or password",
             });
         }
 
 // הסבר: מחזיר הודעת הצלחה ופרטי משתמש בטוחים.
+        clearFailedLogins(req);
+        const token = await issueSession(user._id);
         res.status(200).json({
             message: "Login successful!",
+            token,
             user: {
                 username: user.username,
                 email: user.email,
@@ -1203,51 +1063,20 @@ app.post("/api/login", async function (req, res) {
     }
 });
 
-/* -------------------------------
-   Create Admin
--------------------------------- */
+app.get("/api/auth/me", requireAuth, function (req, res) {
+    const user = req.user;
+    res.json({ user: {
+        username: user.username, email: user.email || "",
+        firstName: user.firstName || "", lastName: user.lastName || "", role: user.role
+    } });
+});
 
-// יצירת משתמש מנהל קבוע
-// הסבר: נתיב עזר זה יוצר משתמש מנהל קבוע אם הוא עדיין אינו קיים.
-app.get("/api/auth/create-admin", async function (req, res) {
+app.post("/api/auth/logout", requireAuth, async function (req, res) {
     try {
-// הסבר: בודק אם כבר קיים משתמש בשם admin.
-        const existingAdmin = await User.findOne({ username: "admin" });
-
-// הסבר: אם המנהל כבר קיים, מחזיר הודעה בלי ליצור כפילות.
-        if (existingAdmin) {
-            return res.json({
-                message: "Admin user already exists",
-            });
-        }
-
-// הסבר: מצפין את סיסמת ברירת המחדל של המנהל.
-        const hashedPassword = await bcrypt.hash("Admin123", 10);
-
-// הסבר: יוצר במסד משתמש בעל role של admin.
-        const adminUser = await User.create({
-            username: "admin",
-            email: "admin@drivex.com",
-            password: hashedPassword,
-            firstName: "Admin",
-            lastName: "User",
-            role: "admin",
-        });
-
-// הסבר: מחזיר הודעת הצלחה ואת פרטי המנהל ללא הסיסמה.
-        res.json({
-            message: "Admin user created successfully",
-            user: {
-                username: adminUser.username,
-                email: adminUser.email,
-                firstName: adminUser.firstName,
-                role: adminUser.role,
-            },
-        });
+        await Session.deleteOne({ tokenHash: req.sessionTokenHash });
+        res.json({ message: "Logged out" });
     } catch (error) {
-        res.status(500).json({
-            message: "Error creating admin user",
-        });
+        res.status(500).json({ message: "Could not log out" });
     }
 });
 
@@ -1257,7 +1086,9 @@ app.get("/api/auth/create-admin", async function (req, res) {
 
 // הפעלת השרת
 // הסבר: מפעיל את שרת Express ומתחיל להאזין לבקשות בפורט שנבחר.
-app.listen(PORT, function () {
+if (require.main === module) app.listen(PORT, function () {
 // הסבר: מדפיס ב-Console את הפורט שעליו השרת פועל.
     console.log("Server is running on port " + PORT);
 });
+// Export the Express app for isolated API tests (no listener or database connection).
+module.exports = app;

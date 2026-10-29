@@ -13,7 +13,7 @@ if (statusText) {
 
 // פונקציה שמחזירה את המשתמש המחובר מהדפדפן
 function getCurrentUser() {
-    return JSON.parse(localStorage.getItem("currentUser"));
+    return sessionStorage.getItem("authToken") ? JSON.parse(localStorage.getItem("currentUser")) : null;
 }
 
 // פונקציה שמחזירה את העגלה מהדפדפן
@@ -132,7 +132,13 @@ function updateNavbarUser() {
 
 // יציאה מהחשבון
 if (logoutButton) {
-    logoutButton.addEventListener("click", function () {
+    logoutButton.addEventListener("click", async function () {
+        const token = sessionStorage.getItem("authToken");
+        if (token) {
+            try { await fetch("/api/auth/logout", { method: "POST", headers: { Authorization: "Bearer " + token } }); }
+            catch (error) { console.warn("Could not revoke session", error); }
+        }
+        sessionStorage.removeItem("authToken");
         localStorage.removeItem("currentUser");
         window.location.href = "login.html";
     });
