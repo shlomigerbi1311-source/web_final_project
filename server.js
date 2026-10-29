@@ -31,7 +31,7 @@ const app = express();
 
 // הגדרות בסיסיות לשרת
 // הסבר: מפעיל CORS עבור כל הבקשות שנכנסות לשרת.
-app.use(cors());
+app.use(cors({ origin: false })); // Same-origin demo app.
 // הסבר: מאפשר לשרת לקרוא גוף בקשה שנשלח בפורמט JSON דרך req.body.
 app.use(express.json({ limit: "50kb" }));
 // הסבר: מאפשר להגיש לדפדפן את הקבצים הסטטיים מתוך תיקיית public.
@@ -108,7 +108,7 @@ app.get("/api/products", async function (req, res) {
 // הסבר: מקבל את הקטגוריה שלפיה רוצים לסנן.
         const category = req.query.category;
 // הסבר: מקבל את מילות החיפוש שהמשתמש הקליד.
-        const search = req.query.search;
+        const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 100) : "";
 
 // הסבר: אובייקט זה יכיל את הוראות המיון עבור MongoDB.
         let sortQuery = {};
@@ -123,12 +123,12 @@ app.get("/api/products", async function (req, res) {
 
         // חיפוש לפי שם מוצר או תיאור
 // הסבר: מוסיף חיפוש רק כאשר הוזן טקסט שאינו ריק.
-        if (search && search.trim() !== "") {
+        if (search !== "") {
 // הסבר: $or מאפשר למצוא התאמה בשם המוצר או בתיאור שלו.
             filterQuery.$or = [
 // הסבר: $regex מבצע חיפוש חלקי ו-$options עם i מתעלם מהבדל בין אותיות גדולות לקטנות.
-                { name: { $regex: search, $options: "i" } },
-                { description: { $regex: search, $options: "i" } },
+                { name: { $regex: search.replace(/[^a-zA-Z0-9\u0590-\u05FF ]/g, ""), $options: "i" } },
+                { description: { $regex: search.replace(/[^a-zA-Z0-9\u0590-\u05FF ]/g, ""), $options: "i" } },
             ];
         }
 
