@@ -69,7 +69,7 @@ function getCart() {
 
 // מחזירה את פרטי המשתמש המחובר מתוך localStorage.
 function getCurrentUser() {
-    return JSON.parse(localStorage.getItem("currentUser"));
+    return sessionStorage.getItem("authToken") ? JSON.parse(localStorage.getItem("currentUser")) : null;
 }
 
 // מחזירה את מחיר המשלוח וזמן המשלוח לפי המדינה שנבחרה.
