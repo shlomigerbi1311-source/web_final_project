@@ -173,10 +173,10 @@ function loadCheckoutItems() {
         itemDiv.innerHTML = `
             <div>
                 <h3></h3>
-                <p>Price: $${item.price}</p>
-                <p>Quantity: ${item.quantity}</p>
+                <p>Price: ${(Number(item.price) || 0).toFixed(2)}</p>
+                <p>Quantity: ${Number(item.quantity) || 0}</p>
             </div>
-            <strong>$${item.price * item.quantity}</strong>
+            <strong>${((Number(item.price) || 0) * (Number(item.quantity) || 0)).toFixed(2)}</strong>
         `;
 
         // מוסיפה את המוצר לאזור המוצרים בעמוד.
