@@ -1,73 +1,44 @@
-# DriveX — Full-Stack E-Commerce Web Application
+# DriveX — Car Accessories Store
 
-**A car-accessories online store | Academic team project (2 developers)**
+DriveX is an online car accessories store that [Ophir Agami](https://github.com/OphirAgami) and I built for our web development course. We used JavaScript, Node.js, Express and MongoDB.
 
-**Shlomi Gerbi — core store functionality, admin features, integration & project improvements**  
-**Collaborator:** [Ophir Agami](https://github.com/OphirAgami)
+The store includes product search and filtering, a shopping cart, checkout, customer orders and an admin area for managing the store.
 
-DriveX is a full-stack e-commerce application developed as an academic project. It combines a responsive storefront, customer ordering workflows, administration tools and MongoDB-backed data operations. The project was built collaboratively by Shlomi Gerbi and Ophir Agami.
+## What I worked on
 
-> This repository showcases the source code of a completed course project. It is not a publicly hosted production store.
+I focused mainly on the store features and admin side of the project:
 
-## My Contributions — Shlomi Gerbi
+- Product listings, search, category filters, sorting and product details
+- Cart, checkout and customer order history
+- Admin features for managing products, orders and support requests
+- API routes and MongoDB operations, including aggregation queries for statistics
+- Connecting the frontend to the backend, testing the flows and improving the UI and code
 
-I took an active role in feature planning, integration, testing and continuous refinement of the project. My main areas of work included:
+I also took an active role in planning the work with Ophir. Before submitting, I went back through the project to fix issues and improve parts that could be clearer or simpler.
 
-- **Product catalog:** Product listing, search, filtering, sorting and product-management functionality.
-- **Shopping experience:** Cart, checkout flow, order placement and customer order history.
-- **Administration:** Product and inventory-related management, order management and store administration screens.
-- **Database integration:** Backend API operations using MongoDB/Mongoose, including MongoDB Aggregation queries for statistics.
-- **Quality and usability:** Debugging, reviewing and simplifying code where practical, and refining interface consistency and user experience.
-- **Team coordination:** Collaborating on implementation decisions, merging functionality and leading additional review cycles before submission.
+## Teamwork
 
-These points describe my areas of contribution; the application was developed by **both team members**.
+This was a **two-person project**, not a solo build. Ophir worked on the initial project setup, MongoDB connection, User and Product models, and registration and login features. He also worked on user-account and supplier features. We combined our parts into one application.
 
-## Collaboration — Ophir Agami
-
-Ophir contributed important foundational components, including the initial project structure, registration and login flows, password hashing with `bcryptjs`, the original MongoDB connection and initial User/Product models. His work also included user-account and supplier-related functionality. We integrated our work into a shared application.
-
-## Key Features
-
-| Area | Functionality |
-| --- | --- |
-| Storefront | Browse, search, filter and sort car-accessory products |
-| Shopping | Shopping cart, checkout and order creation |
-| Accounts | Registration, login and customer order history |
-| Administration | Manage products and orders, update order statuses |
-| Analytics | MongoDB Aggregation-based product statistics |
-| Support | Customer support requests and admin handling |
-
-## Tech Stack
+## Technologies
 
 - **Frontend:** HTML, CSS, JavaScript
-- **Backend:** Node.js, Express, REST-style APIs
-- **Database:** MongoDB Atlas, Mongoose, Aggregation Pipeline
-- **Development:** Git, GitHub
-- **Authentication components:** bcryptjs
+- **Backend:** Node.js, Express
+- **Database:** MongoDB Atlas, Mongoose
+- **Tools:** Git, GitHub
 
-## Repository Structure
+## Running the project
 
-```text
-public/        Web pages, styles, images and client-side JavaScript
-models/        Mongoose models for products, users, orders and support tickets
-server.js      Express server, API routes and database integration
-package.json   Dependencies and run scripts
-.env.example   Example environment variables
-```
+The repository contains the source code, not a hosted website. To run it locally, you need Node.js and a MongoDB connection.
 
-## Run Locally
+1. Clone the repository.
+2. Run `npm install`.
+3. Create a `.env` file based on `.env.example` and set `MONGO_URI` to your own MongoDB connection string.
+4. Run `npm start`.
+5. Open `http://localhost:3000`.
 
-A local Node.js installation and a MongoDB connection are required.
-
-1. Clone this repository and enter its directory.
-2. Install dependencies: `npm install`
-3. Create a local `.env` file from `.env.example` and configure `MONGO_URI`. **Never commit real credentials.**
-4. Start the application: `npm start`
-5. Visit `http://localhost:3000` in your browser.
-
-Some features depend on an available database and suitable data in MongoDB.
+Do not upload your `.env` file or database credentials to GitHub.
 
 ---
 
-**Developers:** [Shlomi Gerbi](https://github.com/shlomigerbi1311-source) and [Ophir Agami](https://github.com/OphirAgami)  
-**Project type:** Academic full-stack development project
+**Developers:** [Shlomi Gerbi](https://github.com/shlomigerbi1311-source) and [Ophir Agami](https://github.com/OphirAgami)
