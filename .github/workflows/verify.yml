@@ -1,7 +1,7 @@
 name: Verify DriveX
 on:
   push:
-    branches: [security-hardening-2026-10-29]
+    branches: [main, security-hardening-2026-10-29]
   pull_request:
     branches: [main]
 jobs:
@@ -19,4 +19,4 @@ jobs:
       - name: Run unit tests
         run: npm test
       - name: Report dependency advisories
-        run: npm audit --omit=dev || true
+        run: npm audit --omit=dev --audit-level=moderate
