@@ -45,16 +45,11 @@ const MONGO_URI = process.env.MONGO_URI;
 
 // חיבור למסד הנתונים MongoDB Atlas
 // הסבר: מתחיל ניסיון חיבור למסד הנתונים בעזרת כתובת החיבור.
-mongoose
-    .connect(MONGO_URI)
-    // הסבר: הקטע הזה פועל כאשר החיבור ל-MongoDB הצליח.
-    .then(function () {
-        console.log("Connected to MongoDB Atlas successfully");
-    })
-    // הסבר: הקטע הזה פועל כאשר החיבור נכשל ומדפיס את סיבת השגיאה.
-    .catch(function (error) {
-        console.log("MongoDB connection error:", error.message);
-    });
+if (process.env.NODE_ENV !== "test") {
+    mongoose.connect(MONGO_URI)
+        .then(() => console.log("Connected to MongoDB Atlas successfully"))
+        .catch(error => console.error("MongoDB connection error:", error.message));
+}
 
 // בדיקה שה-API עובד
 // הסבר: נתיב GET פשוט שמאפשר לבדוק שהשרת וה-API פעילים.
@@ -1083,7 +1078,9 @@ app.post("/api/auth/logout", requireAuth, async function (req, res) {
 
 // הפעלת השרת
 // הסבר: מפעיל את שרת Express ומתחיל להאזין לבקשות בפורט שנבחר.
-app.listen(PORT, function () {
+if (require.main === module) app.listen(PORT, function () {
 // הסבר: מדפיס ב-Console את הפורט שעליו השרת פועל.
     console.log("Server is running on port " + PORT);
 });
+// Export the Express app for isolated API tests (no listener or database connection).
+module.exports = app;
