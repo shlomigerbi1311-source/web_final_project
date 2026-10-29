@@ -18,3 +18,5 @@ jobs:
         run: find . -name '*.js' -not -path './node_modules/*' -print0 | xargs -0 -n1 node --check
       - name: Run unit tests
         run: npm test
+      - name: Report dependency advisories
+        run: npm audit --omit=dev || true
