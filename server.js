@@ -829,9 +829,9 @@ app.post("/api/auth/signup", async function (req, res) {
         const password = req.body.password;
 
 // הסבר: מוודא ששני השדות החיוניים קיימים.
-        if (!username || !password) {
+        if (typeof username !== "string" || username.trim().length < 3 || username.length > 100 || typeof password !== "string" || password.length < 8 || password.length > 128) {
             return res.status(400).json({
-                message: "Username and password are required",
+                message: "Username must be 3-100 characters and password 8-128 characters",
             });
         }
 
@@ -872,7 +872,7 @@ app.post("/api/auth/signup", async function (req, res) {
 
 // התחברות לפי שם משתמש
 // הסבר: נתיב התחברות זה מאמת משתמש לפי username וסיסמה.
-app.post("/api/auth/login", async function (req, res) {
+app.post("/api/auth/login", checkLoginRate, async function (req, res) {
     try {
 // הסבר: קורא את פרטי ההתחברות מגוף הבקשה.
         const username = req.body.username;
@@ -883,24 +883,30 @@ app.post("/api/auth/login", async function (req, res) {
 
 // הסבר: אם המשתמש לא נמצא, מחזיר הודעה כללית כדי לא לחשוף מידע.
         if (!user) {
+            recordFailedLogin(req);
             return res.status(400).json({
                 message: "Invalid username or password",
             });
         }
 
 // הסבר: משווה את הסיסמה שהוזנה לסיסמה המוצפנת במסד.
+        if (typeof password !== "string" || !password) return res.status(400).json({ message: "Invalid username or password" });
         const isPasswordCorrect = await bcrypt.compare(password, user.password);
 
 // הסבר: אם הסיסמה אינה מתאימה, ההתחברות נדחית.
         if (!isPasswordCorrect) {
+            recordFailedLogin(req);
             return res.status(400).json({
                 message: "Invalid username or password",
             });
         }
 
 // הסבר: מחזיר את פרטי המשתמש הדרושים לצד הלקוח, ללא הסיסמה.
+        clearFailedLogins(req);
+        const token = await issueSession(user._id);
         res.json({
             message: "Login successful",
+            token,
             user: {
                 username: user.username,
                 email: user.email || "",
@@ -933,9 +939,9 @@ app.post("/api/register", async function (req, res) {
 // הסבר: כל משתמש חדש שנרשם דרך הנתיב מקבל תפקיד customer.
         const role = "customer";
 // הסבר: דוחה הרשמה ללא אימייל או סיסמה.
-        if (!email || !password) {
+        if (typeof email !== "string" || email.length > 200 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || typeof password !== "string" || password.length < 8 || password.length > 128) {
             return res.status(400).json({
-                message: "Email and password are required",
+                message: "Please provide a valid email and password (8-128 characters)",
             });
         }
 
@@ -990,7 +996,7 @@ app.post("/api/register", async function (req, res) {
 
 // התחברות לפי אימייל
 // הסבר: נתיב התחברות נוסף שמקבל אימייל וסיסמה.
-app.post("/api/login", async function (req, res) {
+app.post("/api/login", checkLoginRate, async function (req, res) {
     try {
 // הסבר: קורא את פרטי ההתחברות מגוף הבקשה.
         const email = req.body.email;
@@ -1013,24 +1019,30 @@ app.post("/api/login", async function (req, res) {
 
 // הסבר: אם המשתמש לא נמצא, מחזיר שגיאת אימות 401.
         if (!user) {
+            recordFailedLogin(req);
             return res.status(401).json({
                 message: "Invalid email or password",
             });
         }
 
 // הסבר: משווה את הסיסמה שהוזנה ל-Hash שנשמר במסד.
+        if (typeof password !== "string" || !password) return res.status(401).json({ message: "Invalid email or password" });
         const isMatch = await bcrypt.compare(password, user.password);
 
 // הסבר: אם ההשוואה נכשלת, מחזיר שגיאת אימות.
         if (!isMatch) {
+            recordFailedLogin(req);
             return res.status(401).json({
                 message: "Invalid email or password",
             });
         }
 
 // הסבר: מחזיר הודעת הצלחה ופרטי משתמש בטוחים.
+        clearFailedLogins(req);
+        const token = await issueSession(user._id);
         res.status(200).json({
             message: "Login successful!",
+            token,
             user: {
                 username: user.username,
                 email: user.email,
@@ -1048,51 +1060,20 @@ app.post("/api/login", async function (req, res) {
     }
 });
 
-/* -------------------------------
-   Create Admin
--------------------------------- */
+app.get("/api/auth/me", requireAuth, function (req, res) {
+    const user = req.user;
+    res.json({ user: {
+        username: user.username, email: user.email || "",
+        firstName: user.firstName || "", lastName: user.lastName || "", role: user.role
+    } });
+});
 
-// יצירת משתמש מנהל קבוע
-// הסבר: נתיב עזר זה יוצר משתמש מנהל קבוע אם הוא עדיין אינו קיים.
-app.get("/api/auth/create-admin", async function (req, res) {
+app.post("/api/auth/logout", requireAuth, async function (req, res) {
     try {
-// הסבר: בודק אם כבר קיים משתמש בשם admin.
-        const existingAdmin = await User.findOne({ username: "admin" });
-
-// הסבר: אם המנהל כבר קיים, מחזיר הודעה בלי ליצור כפילות.
-        if (existingAdmin) {
-            return res.json({
-                message: "Admin user already exists",
-            });
-        }
-
-// הסבר: מצפין את סיסמת ברירת המחדל של המנהל.
-        const hashedPassword = await bcrypt.hash("Admin123", 10);
-
-// הסבר: יוצר במסד משתמש בעל role של admin.
-        const adminUser = await User.create({
-            username: "admin",
-            email: "admin@drivex.com",
-            password: hashedPassword,
-            firstName: "Admin",
-            lastName: "User",
-            role: "admin",
-        });
-
-// הסבר: מחזיר הודעת הצלחה ואת פרטי המנהל ללא הסיסמה.
-        res.json({
-            message: "Admin user created successfully",
-            user: {
-                username: adminUser.username,
-                email: adminUser.email,
-                firstName: adminUser.firstName,
-                role: adminUser.role,
-            },
-        });
+        await Session.deleteOne({ tokenHash: req.sessionTokenHash });
+        res.json({ message: "Logged out" });
     } catch (error) {
-        res.status(500).json({
-            message: "Error creating admin user",
-        });
+        res.status(500).json({ message: "Could not log out" });
     }
 });
 
